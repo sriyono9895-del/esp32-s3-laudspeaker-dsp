@@ -1,12 +1,7 @@
 #pragma once
 
-#if defined(ARDUINO)
-#include <Arduino.h>
-#else
-#include <cmath>
 #include <array>
-#include <iostream>
-#endif
+#include <cmath>
 
 namespace laudspeaker {
 
@@ -27,6 +22,10 @@ struct CrossoverSettings {
 class AudioDSPManager {
 public:
   static constexpr size_t kEqBands = 10;
+  static constexpr float kSampleRateHz = 48000.0f;
+  static constexpr std::array<float, kEqBands> kEqCenterFrequenciesHz = {
+      31.0f, 63.0f, 125.0f, 250.0f, 500.0f,
+      1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f};
 
   AudioDSPManager();
 
@@ -37,6 +36,7 @@ public:
 
   std::array<float, kEqBands>& eqBands();
   const std::array<float, kEqBands>& eqBands() const;
+  const std::array<float, kEqBands>& eqCenterFrequenciesHz() const;
   GainSettings& gains();
   const GainSettings& gains() const;
   CrossoverSettings& crossover();
@@ -44,15 +44,14 @@ public:
 
   float processSample(float input);
   float processChannel(float input, int channelIndex);
-
   void printSummary();
 
 private:
   static float dBToLinear(float dB);
-  static float applyEqBand(float sample, float gainDb);
 
-  float onePoleLowPass(float input, float cutoffHz, float sampleRate, float& state);
-  float onePoleHighPass(float input, float cutoffHz, float sampleRate, float& state);
+  float lowPass(float input, float cutoffHz, float& state);
+  float highPass(float input, float cutoffHz, float& state);
+  float bandPass(float input, float lowCutHz, float highCutHz, float& lowState, float& highState);
 
   std::array<float, kEqBands> eq_{0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
                                 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -60,9 +59,9 @@ private:
   CrossoverSettings crossover_{150.0f, 900.0f, 3500.0f, 12000.0f};
 
   float lowState_{0.0f};
-  float midState_{0.0f};
+  float midLowState_{0.0f};
+  float midHighState_{0.0f};
   float highState_{0.0f};
 };
 
 }  // namespace laudspeaker
-

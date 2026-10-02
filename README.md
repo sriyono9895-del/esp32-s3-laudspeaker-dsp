@@ -61,7 +61,7 @@ void showCrossover() {
 }
 
 void showGain() {
-  auto g = dsp.gains();
+  const auto g = dsp.gains();
   Serial.println("\nCurrent gain settings:");
   Serial.printf("Master gain: %.2f dB\n", g.master);
   Serial.printf("Low gain: %.2f dB\n", g.low);
@@ -71,30 +71,30 @@ void showGain() {
 
 void setEqBand() {
   Serial.println("Select band 1..10:");
-  int band = readIntValue();
+  const int band = readIntValue();
   if (band < 1 || band > 10) {
     Serial.println("Invalid band number.");
     return;
   }
 
   Serial.println("Enter dB value:");
-  float db = readFloatValue();
+  const float db = readFloatValue();
   dsp.setEqBand(band - 1, db);
   Serial.printf("Band %d set to %.2f dB\n", band, db);
 }
 
 void setCrossover() {
   Serial.println("Enter low cutoff Hz:");
-  float low = readFloatValue();
+  const float low = readFloatValue();
 
   Serial.println("Enter mid-low Hz:");
-  float midLow = readFloatValue();
+  const float midLow = readFloatValue();
 
   Serial.println("Enter mid-high Hz:");
-  float midHigh = readFloatValue();
+  const float midHigh = readFloatValue();
 
   Serial.println("Enter high cutoff Hz:");
-  float high = readFloatValue();
+  const float high = readFloatValue();
 
   dsp.setCrossover(low, midLow, midHigh, high);
   Serial.println("Crossover updated.");
@@ -102,16 +102,16 @@ void setCrossover() {
 
 void setGain() {
   Serial.println("Enter master gain dB:");
-  float master = readFloatValue();
+  const float master = readFloatValue();
 
   Serial.println("Enter low gain dB:");
-  float low = readFloatValue();
+  const float low = readFloatValue();
 
   Serial.println("Enter mid gain dB:");
-  float mid = readFloatValue();
+  const float mid = readFloatValue();
 
   Serial.println("Enter high gain dB:");
-  float high = readFloatValue();
+  const float high = readFloatValue();
 
   dsp.setGain(master, low, mid, high);
   Serial.println("Gain values updated.");
@@ -121,7 +121,7 @@ void processTestSignal() {
   Serial.println("Processing test signal...");
 
   for (int i = 0; i < 10; ++i) {
-    const float sample = 0.4f * std::sin((2.0f * PI * 220.0f * i) / 48000.0f);
+    const float sample = 0.4f * std::sin((2.0f * static_cast<float>(M_PI) * 220.0f * i) / 48000.0f);
     const float processed = dsp.processSample(sample);
     const float low = dsp.processChannel(processed, 0);
     const float mid = dsp.processChannel(processed, 1);
