@@ -26,10 +26,11 @@ public:
   void setGainValues(const GainSettings& gain);
   void setCrossoverValues(const CrossoverSettings& xover);
   void refresh();
-  void next();
-  void previous();
-  void select();
+  void nextItem();
+  void previousItem();
+  void selectItem();
   Page currentPage() const;
+  int getCurrentIndex() const;
 
 private:
   TFT_eSPI tft_;

@@ -1,223 +1,188 @@
-#include <Arduino.h>
-#include <cmath>
+# ESP32-S3 Laudspeaker Management System
 
-#include "audio/AudioDSP.h"
-#include "ui/LcdMenu.h"
+**Sistem manajemen audio digital untuk laudspeaker dengan kontrol EQ 10-band, crossover 3-way, dan gain adjustable.**
 
-namespace {
+## Fitur Utama
 
-using laudspeaker::AudioDSPManager;
-using laudspeaker::LcdMenu;
+✅ 10-band Equalizer (31Hz - 16kHz)  
+✅ 3-way Crossover (Low, Mid, High)  
+✅ Gain Master + Per Channel  
+✅ Menu TFT LCD 320x240  
+✅ Kontrol Serial (115200 baud)  
+✅ Test signal processing  
+✅ Default profile management  
 
-AudioDSPManager dsp;
-LcdMenu lcdMenu;
+## Hardware Requirements
 
-void printMenu() {
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("ESP32-S3 Laudspeaker Management System");
-  Serial.println("========================================");
-  Serial.println("1. Show EQ");
-  Serial.println("2. Set EQ band");
-  Serial.println("3. Show crossover");
-  Serial.println("4. Set crossover");
-  Serial.println("5. Show gain");
-  Serial.println("6. Set gain");
-  Serial.println("7. Process test signal");
-  Serial.println("8. Reset default profile");
-  Serial.println("9. Show DSP summary");
-  Serial.println("0. Show menu");
-  Serial.println("========================================");
-}
+- **MCU**: ESP32-S3 DevKitC-1
+- **Display**: ST7789 TFT 320x240
+- **Connections**:
+  - TFT MOSI (SPI) → GPIO 23
+  - TFT SCLK (SPI) → GPIO 18
+  - TFT CS → GPIO 5
+  - TFT DC → GPIO 4
+  - TFT RST → GPIO 2
+  - TFT BL (Backlight) → GPIO 15
+  - TFT GND → GND
+  - TFT VCC → 3V3
 
-float readFloatValue() {
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  return Serial.parseFloat();
-}
+*Note: Sesuaikan pin jika menggunakan board yang berbeda*
 
-int readIntValue() {
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  return Serial.parseInt();
-}
+## Instalasi
 
-void updateDisplay() {
-  lcdMenu.setEqValues(dsp.eqBands());
-  lcdMenu.setGainValues(dsp.gains());
-  lcdMenu.setCrossoverValues(dsp.crossover());
-  lcdMenu.refresh();
-}
+### 1. Install PlatformIO
+```bash
+# Install di VS Code
+# Atau gunakan command line: pip install platformio
+```
 
-void showEq() {
-  Serial.println("\nCurrent EQ settings (dB):");
-  const auto& freqs = dsp.eqCenterFrequenciesHz();
-  for (size_t i = 0; i < dsp.eqBands().size(); ++i) {
-    Serial.printf("Band %d [%5.0f Hz] : %.2f dB\n", static_cast<int>(i + 1), freqs[i], dsp.eqBands()[i]);
-  }
-  updateDisplay();
-}
+### 2. Clone atau Download Project
+```bash
+git clone https://github.com/sriyono9895-del/esp32-s3-laudspeaker-dsp.git
+cd esp32-s3-laudspeaker-dsp
+```
 
-void showCrossover() {
-  Serial.println("\nCurrent crossover settings:");
-  Serial.printf("Low cutoff: %.1f Hz\n", dsp.crossover().lowCutHz);
-  Serial.printf("Mid low: %.1f Hz\n", dsp.crossover().midLowHz);
-  Serial.printf("Mid high: %.1f Hz\n", dsp.crossover().midHighHz);
-  Serial.printf("High cutoff: %.1f Hz\n", dsp.crossover().highCutHz);
-  updateDisplay();
-}
+### 3. Build & Upload
+```bash
+# Build
+pio run -e esp32-s3-devkitc-1
 
-void showGain() {
-  const auto g = dsp.gains();
-  Serial.println("\nCurrent gain settings:");
-  Serial.printf("Master gain: %.2f dB\n", g.master);
-  Serial.printf("Low gain: %.2f dB\n", g.low);
-  Serial.printf("Mid gain: %.2f dB\n", g.mid);
-  Serial.printf("High gain: %.2f dB\n", g.high);
-  updateDisplay();
-}
+# Upload
+pio run -e esp32-s3-devkitc-1 -t upload
 
-void setEqBand() {
-  Serial.println("Select band 1..10:");
-  const int band = readIntValue();
-  if (band < 1 || band > 10) {
-    Serial.println("Invalid band number.");
-    return;
-  }
+# Monitor Serial
+pio device monitor -b 115200
+```
 
-  Serial.println("Enter dB value:");
-  const float db = readFloatValue();
-  dsp.setEqBand(band - 1, db);
-  Serial.printf("Band %d set to %.2f dB\n", band, db);
-  updateDisplay();
-}
+## Menu Serial
 
-void setCrossover() {
-  Serial.println("Enter low cutoff Hz:");
-  const float low = readFloatValue();
+| Perintah | Fungsi |
+|----------|--------|
+| `0` | Tampilkan menu |
+| `1` | Lihat EQ settings |
+| `2` | Set band EQ |
+| `3` | Lihat crossover |
+| `4` | Set crossover |
+| `5` | Lihat gain |
+| `6` | Set gain |
+| `7` | Process test signal |
+| `8` | Reset profile default |
+| `9` | Show DSP summary |
+| `u` | Menu UP |
+| `d` | Menu DOWN |
+| `e` | Menu SELECT |
 
-  Serial.println("Enter mid-low Hz:");
-  const float midLow = readFloatValue();
+## Struktur File
 
-  Serial.println("Enter mid-high Hz:");
-  const float midHigh = readFloatValue();
+```
+src/
+├── main.cpp              # Main program & serial menu
+├── audio/
+│   ├── AudioDSP.h       # DSP header
+│   └── AudioDSP.cpp     # DSP implementation
+└── ui/
+    ├── LcdMenu.h        # LCD menu header
+    └── LcdMenu.cpp      # LCD menu implementation
 
-  Serial.println("Enter high cutoff Hz:");
-  const float high = readFloatValue();
+User_Setup.h             # TFT_eSPI configuration
+platformio.ini          # Build configuration
+```
 
-  dsp.setCrossover(low, midLow, midHigh, high);
-  Serial.println("Crossover updated.");
-  updateDisplay();
-}
+## EQ Bands (10-band)
 
-void setGain() {
-  Serial.println("Enter master gain dB:");
-  const float master = readFloatValue();
+| Band | Frequency |
+|------|----------|
+| 1 | 31 Hz |
+| 2 | 63 Hz |
+| 3 | 125 Hz |
+| 4 | 250 Hz |
+| 5 | 500 Hz |
+| 6 | 1 kHz |
+| 7 | 2 kHz |
+| 8 | 4 kHz |
+| 9 | 8 kHz |
+| 10 | 16 kHz |
 
-  Serial.println("Enter low gain dB:");
-  const float low = readFloatValue();
+## Crossover Default Settings
 
-  Serial.println("Enter mid gain dB:");
-  const float mid = readFloatValue();
+- **Low cutoff**: 150 Hz
+- **Mid-Low**: 900 Hz
+- **Mid-High**: 3500 Hz
+- **High cutoff**: 12000 Hz
 
-  Serial.println("Enter high gain dB:");
-  const float high = readFloatValue();
+## Contoh Penggunaan
 
-  dsp.setGain(master, low, mid, high);
-  Serial.println("Gain values updated.");
-  updateDisplay();
-}
+### Via Serial Monitor
 
-void processTestSignal() {
-  Serial.println("Processing test signal...");
+```
+# Set Band 1 EQ ke +3 dB
+2
+1
+3
 
-  for (int i = 0; i < 8; ++i) {
-    const float sample = 0.4f * std::sin((2.0f * static_cast<float>(M_PI) * 220.0f * i) / 48000.0f);
-    const float processed = dsp.processSample(sample);
-    const float low = dsp.processChannel(processed, 0);
-    const float mid = dsp.processChannel(processed, 1);
-    const float high = dsp.processChannel(processed, 2);
+# Set Gain Low ke +6 dB
+6
+0
+6
+0
+0
+```
 
-    Serial.printf("Sample %d -> low=%.4f mid=%.4f high=%.4f\n", i, low, mid, high);
-    delay(20);
-  }
-}
+### Via LCD Menu
 
-}  // namespace
+1. Ketik `u` untuk navigasi UP
+2. Ketik `d` untuk navigasi DOWN
+3. Ketik `e` untuk SELECT
 
-void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
+## DSP Processing
 
-  dsp.setDefaultProfile();
-  lcdMenu.init();
-  updateDisplay();
-  printMenu();
-}
+**Alur Sinyal:**
 
-void loop() {
-  if (Serial.available() > 0) {
-    const char command = Serial.read();
+```
+Input Sample
+    ↓
+[Master Gain]
+    ↓
+[10-Band EQ]
+    ↓
+[3-Way Crossover]
+    ├→ Low Pass Filter  → Low Gain   → Output 1
+    ├→ Band Pass Filter → Mid Gain   → Output 2
+    └→ High Pass Filter → High Gain  → Output 3
+```
 
-    switch (command) {
-      case '0':
-        printMenu();
-        break;
-      case '1':
-        showEq();
-        break;
-      case '2':
-        setEqBand();
-        break;
-      case '3':
-        showCrossover();
-        break;
-      case '4':
-        setCrossover();
-        break;
-      case '5':
-        showGain();
-        break;
-      case '6':
-        setGain();
-        break;
-      case '7':
-        processTestSignal();
-        break;
-      case '8':
-        dsp.setDefaultProfile();
-        Serial.println("Default profile restored.");
-        updateDisplay();
-        break;
-      case '9':
-        dsp.printSummary();
-        break;
-      case 'u':
-        lcdMenu.next();
-        break;
-      case 'd':
-        lcdMenu.previous();
-        break;
-      case 'e':
-        lcdMenu.select();
-        break;
-      case '\n':
-      case '\r':
-        break;
-      default:
-        Serial.println("Invalid command.");
-        printMenu();
-        break;
-    }
+## Default Profile
 
-    while (Serial.available() > 0) {
-      Serial.read();
-    }
-  }
+Default EQ setup yang sudah dikonfigurasi:
+- Band 2: +1.5 dB
+- Band 3: +2.5 dB
+- Band 5: +3.0 dB
+- Band 6: +1.0 dB
+- Band 7: -1.5 dB
+- Band 8: +1.5 dB
+- Band 9: +2.0 dB
 
-  delay(20);
-}
+## Troubleshooting
+
+### Display tidak muncul
+1. Cek koneksi pin TFT ke ESP32-S3
+2. Verifikasi User_Setup.h sesuai dengan board Anda
+3. Pastikan TFT_eSPI library terinstall di PlatformIO
+
+### Serial monitor error
+1. Pastikan baud rate 115200
+2. Gunakan USB cable yang benar (data + power)
+3. Install CH340/CP210x driver jika diperlukan
+
+### Build error
+1. Run `pio lib update`
+2. Clear build dengan `pio run -t clean`
+3. Build ulang: `pio run -e esp32-s3-devkitc-1`
+
+## License
+
+MIT License
+
+## Support
+
+Untuk bantuan lebih lanjut, buka GitHub issues di repository ini.

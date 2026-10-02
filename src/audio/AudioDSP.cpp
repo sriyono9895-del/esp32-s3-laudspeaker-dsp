@@ -140,8 +140,7 @@ float AudioDSPManager::processChannel(float input, int channelIndex) {
 }
 
 void AudioDSPManager::printSummary() {
-#if defined(ARDUINO)
-  Serial.println("\nDSP summary:");
+  Serial.println("\n=== DSP Summary ===");
   Serial.printf("Master gain: %.2f dB\n", gain_.master);
   Serial.printf("Low gain: %.2f dB\n", gain_.low);
   Serial.printf("Mid gain: %.2f dB\n", gain_.mid);
@@ -150,17 +149,6 @@ void AudioDSPManager::printSummary() {
   Serial.printf("Mid-low: %.1f Hz\n", crossover_.midLowHz);
   Serial.printf("Mid-high: %.1f Hz\n", crossover_.midHighHz);
   Serial.printf("High cutoff: %.1f Hz\n", crossover_.highCutHz);
-#else
-  std::cout << "\nDSP summary:" << std::endl;
-  std::cout << "Master gain: " << gain_.master << " dB" << std::endl;
-  std::cout << "Low gain: " << gain_.low << " dB" << std::endl;
-  std::cout << "Mid gain: " << gain_.mid << " dB" << std::endl;
-  std::cout << "High gain: " << gain_.high << " dB" << std::endl;
-  std::cout << "Low cutoff: " << crossover_.lowCutHz << " Hz" << std::endl;
-  std::cout << "Mid-low: " << crossover_.midLowHz << " Hz" << std::endl;
-  std::cout << "Mid-high: " << crossover_.midHighHz << " Hz" << std::endl;
-  std::cout << "High cutoff: " << crossover_.highCutHz << " Hz" << std::endl;
-#endif
 }
 
 }  // namespace laudspeaker
