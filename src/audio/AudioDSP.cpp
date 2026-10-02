@@ -1,154 +1,69 @@
-#include "AudioDSP.h"
+#pragma once
+
+#include <array>
+#include <cmath>
 
 namespace laudspeaker {
 
-AudioDSPManager::AudioDSPManager() {
-  setDefaultProfile();
-}
+struct GainSettings {
+  float master = 0.0f;
+  float low = 0.0f;
+  float mid = 0.0f;
+  float high = 0.0f;
+};
 
-void AudioDSPManager::setDefaultProfile() {
-  eq_.fill(0.0f);
-  eq_[2] = 2.0f;
-  eq_[4] = 3.0f;
-  eq_[6] = -2.0f;
-  eq_[8] = 1.5f;
+struct CrossoverSettings {
+  float lowCutHz = 150.0f;
+  float midLowHz = 900.0f;
+  float midHighHz = 3500.0f;
+  float highCutHz = 12000.0f;
+};
 
-  gain_.master = 0.0f;
-  gain_.low = 0.0f;
-  gain_.mid = 0.0f;
-  gain_.high = 0.0f;
+class AudioDSPManager {
+public:
+  static constexpr size_t kEqBands = 10;
+  static constexpr float kSampleRateHz = 48000.0f;
+  static constexpr std::array<float, kEqBands> kEqCenterFrequenciesHz = {
+      31.0f, 63.0f, 125.0f, 250.0f, 500.0f,
+      1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f
+  };
 
-  crossover_.lowCutHz = 150.0f;
-  crossover_.midLowHz = 900.0f;
-  crossover_.midHighHz = 3500.0f;
-  crossover_.highCutHz = 12000.0f;
+  AudioDSPManager();
 
-  lowState_ = 0.0f;
-  midState_ = 0.0f;
-  highState_ = 0.0f;
-}
+  void setDefaultProfile();
+  void setEqBand(int index, float dB);
+  void setGain(float masterDb, float lowDb, float midDb, float highDb);
+  void setCrossover(float lowCutHz, float midLowHz, float midHighHz, float highCutHz);
 
-void AudioDSPManager::setEqBand(int index, float dB) {
-  if (index < 0 || index >= static_cast<int>(eq_.size())) {
-    return;
-  }
-  eq_[index] = dB;
-}
+  std::array<float, kEqBands>& eqBands();
+  const std::array<float, kEqBands>& eqBands() const;
+  const std::array<float, kEqBands>& eqCenterFrequenciesHz() const;
+  GainSettings& gains();
+  const GainSettings& gains() const;
+  CrossoverSettings& crossover();
+  const CrossoverSettings& crossover() const;
 
-void AudioDSPManager::setGain(float masterDb, float lowDb, float midDb, float highDb) {
-  gain_.master = masterDb;
-  gain_.low = lowDb;
-  gain_.mid = midDb;
-  gain_.high = highDb;
-}
+  float processSample(float input);
+  float processChannel(float input, int channelIndex);
 
-void AudioDSPManager::setCrossover(float lowCutHz, float midLowHz, float midHighHz, float highCutHz) {
-  crossover_.lowCutHz = lowCutHz;
-  crossover_.midLowHz = midLowHz;
-  crossover_.midHighHz = midHighHz;
-  crossover_.highCutHz = highCutHz;
-}
+  void printSummary();
 
-std::array<float, AudioDSPManager::kEqBands>& AudioDSPManager::eqBands() {
-  return eq_;
-}
+private:
+  static float dBToLinear(float dB);
 
-const std::array<float, AudioDSPManager::kEqBands>& AudioDSPManager::eqBands() const {
-  return eq_;
-}
+  float lowPass(float input, float cutoffHz, float& state);
+  float highPass(float input, float cutoffHz, float& state);
+  float bandPass(float input, float lowCutHz, float highCutHz, float& lowState, float& highState);
 
-GainSettings& AudioDSPManager::gains() {
-  return gain_;
-}
+  std::array<float, kEqBands> eq_{0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  GainSettings gain_{0.0f, 0.0f, 0.0f, 0.0f};
+  CrossoverSettings crossover_{150.0f, 900.0f, 3500.0f, 12000.0f};
 
-const GainSettings& AudioDSPManager::gains() const {
-  return gain_;
-}
-
-CrossoverSettings& AudioDSPManager::crossover() {
-  return crossover_;
-}
-
-const CrossoverSettings& AudioDSPManager::crossover() const {
-  return crossover_;
-}
-
-float AudioDSPManager::dBToLinear(float dB) {
-  return std::pow(10.0f, dB / 20.0f);
-}
-
-float AudioDSPManager::applyEqBand(float sample, float gainDb) {
-  return sample * dBToLinear(gainDb);
-}
-
-float AudioDSPManager::onePoleLowPass(float input, float cutoffHz, float sampleRate, float& state) {
-  const float dt = 1.0f / sampleRate;
-  const float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoffHz);
-  const float alpha = dt / (rc + dt);
-  state = state + alpha * (input - state);
-  return state;
-}
-
-float AudioDSPManager::onePoleHighPass(float input, float cutoffHz, float sampleRate, float& state) {
-  const float dt = 1.0f / sampleRate;
-  const float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoffHz);
-  const float alpha = rc / (rc + dt);
-  const float output = (input - state) * alpha;
-  state = state + output;
-  return output;
-}
-
-float AudioDSPManager::processSample(float input) {
-  float sample = input * dBToLinear(gain_.master);
-  for (size_t i = 0; i < eq_.size(); ++i) {
-    sample = applyEqBand(sample, eq_[i]);
-  }
-  return sample;
-}
-
-float AudioDSPManager::processChannel(float input, int channelIndex) {
-  const float sr = 48000.0f;
-
-  if (channelIndex == 0) {
-    const float filtered = onePoleLowPass(input, crossover_.lowCutHz, sr, lowState_);
-    return filtered * dBToLinear(gain_.low);
-  }
-
-  if (channelIndex == 1) {
-    const float filtered = onePoleLowPass(input, crossover_.midHighHz, sr, midState_);
-    return filtered * dBToLinear(gain_.mid);
-  }
-
-  const float filtered = onePoleHighPass(input, crossover_.midHighHz, sr, highState_);
-  return filtered * dBToLinear(gain_.high);
-}
-
-void AudioDSPManager::printSummary() {
-#if defined(ARDUINO)
-  Serial.println("\nDSP summary:");
-  Serial.printf("Master gain: %.2f dB\n", gain_.master);
-  Serial.printf("Low gain: %.2f dB\n", gain_.low);
-  Serial.printf("Mid gain: %.2f dB\n", gain_.mid);
-  Serial.printf("High gain: %.2f dB\n", gain_.high);
-  Serial.printf("Low cutoff: %.1f Hz\n", crossover_.lowCutHz);
-  Serial.printf("Mid-low: %.1f Hz\n", crossover_.midLowHz);
-  Serial.printf("Mid-high: %.1f Hz\n", crossover_.midHighHz);
-  Serial.printf("High cutoff: %.1f Hz\n", crossover_.highCutHz);
-#else
-  std::cout << "\nDSP summary:" << std::endl;
-  std::cout << "Master gain: " << gain_.master << " dB" << std::endl;
-  std::cout << "Low gain: " << gain_.low << " dB" << std::endl;
-  std::cout << "Mid gain: " << gain_.mid << " dB" << std::endl;
-  std::cout << "High gain: " << gain_.high << " dB" << std::endl;
-  std::cout << "Low cutoff: " << crossover_.lowCutHz << " Hz" << std::endl;
-  std::cout << "Mid-low: " << crossover_.midLowHz << " Hz" << std::endl;
-  std::cout << "Mid-high: " << crossover_.midHighHz << " Hz" << std::endl;
-  std::cout << "High cutoff: " << crossover_.highCutHz << " Hz" << std::endl;
-#endif
-}
+  float lowState_{0.0f};
+  float midLowState_{0.0f};
+  float midHighState_{0.0f};
+  float highState_{0.0f};
+};
 
 }  // namespace laudspeaker
-
-
-
-

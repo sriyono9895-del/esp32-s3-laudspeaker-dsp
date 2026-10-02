@@ -1,217 +1,164 @@
-#include <Arduino.h>
+#include "AudioDSP.h"
 
-#include "audio/AudioDSP.h"
+namespace laudspeaker {
 
-namespace {
-
-using laudspeaker::AudioDSPManager;
-
-AudioDSPManager dsp;
-
-void printMenu() {
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("ESP32-S3 Laudspeaker Management System");
-  Serial.println("========================================");
-  Serial.println("1. Show EQ");
-  Serial.println("2. Set EQ band");
-  Serial.println("3. Show crossover");
-  Serial.println("4. Set crossover");
-  Serial.println("5. Show gain");
-  Serial.println("6. Set gain");
-  Serial.println("7. Process test signal");
-  Serial.println("8. Reset to default profile");
-  Serial.println("0. Show menu");
-  Serial.println("========================================");
+AudioDSPManager::AudioDSPManager() {
+  setDefaultProfile();
 }
 
-void waitForInput() {
-  Serial.println("\nPress Enter to continue...");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  while (Serial.available() > 0) {
-    Serial.read();
-  }
+void AudioDSPManager::setDefaultProfile() {
+  eq_.fill(0.0f);
+  eq_[1] = 1.5f;
+  eq_[2] = 2.5f;
+  eq_[4] = 3.0f;
+  eq_[5] = 1.0f;
+  eq_[6] = -1.5f;
+  eq_[7] = 1.5f;
+  eq_[8] = 2.0f;
+
+  gain_.master = 0.0f;
+  gain_.low = 0.0f;
+  gain_.mid = 0.0f;
+  gain_.high = 0.0f;
+
+  crossover_.lowCutHz = 150.0f;
+  crossover_.midLowHz = 900.0f;
+  crossover_.midHighHz = 3500.0f;
+  crossover_.highCutHz = 12000.0f;
+
+  lowState_ = 0.0f;
+  midLowState_ = 0.0f;
+  midHighState_ = 0.0f;
+  highState_ = 0.0f;
 }
 
-void showEq() {
-  Serial.println("\nCurrent EQ values (dB):");
-  for (size_t i = 0; i < dsp.eqBands().size(); ++i) {
-    Serial.printf("Band %d: %.2f dB\n", i + 1, dsp.eqBands()[i]);
-  }
-}
-
-void showCrossover() {
-  Serial.println("\nCurrent crossover settings:");
-  Serial.printf("Low cutoff: %.1f Hz\n", dsp.crossover().lowCutHz);
-  Serial.printf("Mid low: %.1f Hz\n", dsp.crossover().midLowHz);
-  Serial.printf("Mid high: %.1f Hz\n", dsp.crossover().midHighHz);
-  Serial.printf("High cutoff: %.1f Hz\n", dsp.crossover().highCutHz);
-}
-
-void showGain() {
-  auto g = dsp.gains();
-  Serial.println("\nCurrent gain settings:");
-  Serial.printf("Master gain: %.2f dB\n", g.master);
-  Serial.printf("Low gain: %.2f dB\n", g.low);
-  Serial.printf("Mid gain: %.2f dB\n", g.mid);
-  Serial.printf("High gain: %.2f dB\n", g.high);
-}
-
-void setEqBand() {
-  Serial.println("Select band 1..10:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  int band = Serial.parseInt();
-  if (band < 1 || band > 10) {
-    Serial.println("Invalid band number.");
+void AudioDSPManager::setEqBand(int index, float dB) {
+  if (index < 0 || index >= static_cast<int>(eq_.size())) {
     return;
   }
-
-  Serial.println("Enter dB value:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float db = Serial.parseFloat();
-  dsp.setEqBand(band - 1, db);
-  Serial.printf("Band %d set to %.2f dB\n", band, db);
+  eq_[index] = dB;
 }
 
-void setCrossover() {
-  Serial.println("Enter low cutoff Hz:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float low = Serial.parseFloat();
-
-  Serial.println("Enter mid-low Hz:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float midLow = Serial.parseFloat();
-
-  Serial.println("Enter mid-high Hz:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float midHigh = Serial.parseFloat();
-
-  Serial.println("Enter high cutoff Hz:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float high = Serial.parseFloat();
-
-  dsp.setCrossover(low, midLow, midHigh, high);
-  Serial.println("Crossover updated.");
+void AudioDSPManager::setGain(float masterDb, float lowDb, float midDb, float highDb) {
+  gain_.master = masterDb;
+  gain_.low = lowDb;
+  gain_.mid = midDb;
+  gain_.high = highDb;
 }
 
-void setGain() {
-  Serial.println("Enter master gain dB:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float master = Serial.parseFloat();
-
-  Serial.println("Enter low gain dB:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float low = Serial.parseFloat();
-
-  Serial.println("Enter mid gain dB:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float mid = Serial.parseFloat();
-
-  Serial.println("Enter high gain dB:");
-  while (Serial.available() == 0) {
-    delay(10);
-  }
-  float high = Serial.parseFloat();
-
-  dsp.setGain(master, low, mid, high);
-  Serial.println("Gain values updated.");
+void AudioDSPManager::setCrossover(float lowCutHz, float midLowHz, float midHighHz, float highCutHz) {
+  crossover_.lowCutHz = lowCutHz;
+  crossover_.midLowHz = midLowHz;
+  crossover_.midHighHz = midHighHz;
+  crossover_.highCutHz = highCutHz;
 }
 
-void processTestSignal() {
-  const float sampleRate = 48000.0f;
-  Serial.println("Processing test signal...");
+std::array<float, AudioDSPManager::kEqBands>& AudioDSPManager::eqBands() {
+  return eq_;
+}
 
-  for (int i = 0; i < 8; ++i) {
-    float sample = 0.5f * std::sin((2.0f * PI * 220.0f * i) / sampleRate);
-    float processed = dsp.processSample(sample);
-    float low = dsp.processChannel(processed, 0);
-    float mid = dsp.processChannel(processed, 1);
-    float high = dsp.processChannel(processed, 2);
+const std::array<float, AudioDSPManager::kEqBands>& AudioDSPManager::eqBands() const {
+  return eq_;
+}
 
-    Serial.printf("Sample %d -> low=%.4f mid=%.4f high=%.4f\n", i, low, mid, high);
-    delay(10);
+const std::array<float, AudioDSPManager::kEqBands>& AudioDSPManager::eqCenterFrequenciesHz() const {
+  return kEqCenterFrequenciesHz;
+}
+
+GainSettings& AudioDSPManager::gains() {
+  return gain_;
+}
+
+const GainSettings& AudioDSPManager::gains() const {
+  return gain_;
+}
+
+CrossoverSettings& AudioDSPManager::crossover() {
+  return crossover_;
+}
+
+const CrossoverSettings& AudioDSPManager::crossover() const {
+  return crossover_;
+}
+
+float AudioDSPManager::dBToLinear(float dB) {
+  return std::pow(10.0f, dB / 20.0f);
+}
+
+float AudioDSPManager::lowPass(float input, float cutoffHz, float& state) {
+  if (cutoffHz <= 0.0f) {
+    return input;
+  }
+
+  const float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoffHz);
+  const float alpha = 1.0f / (1.0f + (rc * kSampleRateHz));
+  const float output = (input - state) * alpha;
+  state = state + output;
+  return state;
+}
+
+float AudioDSPManager::highPass(float input, float cutoffHz, float& state) {
+  if (cutoffHz <= 0.0f) {
+    return input;
+  }
+
+  const float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoffHz);
+  const float alpha = rc * kSampleRateHz / (rc * kSampleRateHz + 1.0f);
+  const float output = alpha * (state + input - state);
+  state = input;
+  return output;
+}
+
+float AudioDSPManager::bandPass(float input, float lowCutHz, float highCutHz, float& lowState, float& highState) {
+  const float lowPass = lowPass(input, highCutHz, lowState); // high frequency cutoff
+  const float highPass = highPass(input, lowCutHz, highState); // low frequency cutoff
+  return lowPass - highPass;
+}
+
+float AudioDSPManager::processSample(float input) {
+  float sample = input * dBToLinear(gain_.master);
+  for (size_t i = 0; i < eq_.size(); ++i) {
+    sample = sample * dBToLinear(eq_[i]);
+  }
+  return sample;
+}
+
+float AudioDSPManager::processChannel(float input, int channelIndex) {
+  switch (channelIndex) {
+    case 0: // low
+      return lowPass(input, crossover_.lowCutHz, lowState_) * dBToLinear(gain_.low);
+    case 1: // mid
+      return bandPass(input, crossover_.midLowHz, crossover_.midHighHz, midLowState_, midHighState_) *
+             dBToLinear(gain_.mid);
+    case 2: // high
+      return highPass(input, crossover_.midHighHz, highState_) * dBToLinear(gain_.high);
+    default:
+      return input;
   }
 }
 
-}  // namespace
-
-void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
-
-  dsp.setDefaultProfile();
-  printMenu();
+void AudioDSPManager::printSummary() {
+#if defined(ARDUINO)
+  Serial.println("\nDSP summary:");
+  Serial.printf("Master gain: %.2f dB\n", gain_.master);
+  Serial.printf("Low gain: %.2f dB\n", gain_.low);
+  Serial.printf("Mid gain: %.2f dB\n", gain_.mid);
+  Serial.printf("High gain: %.2f dB\n", gain_.high);
+  Serial.printf("Low cutoff: %.1f Hz\n", crossover_.lowCutHz);
+  Serial.printf("Mid-low: %.1f Hz\n", crossover_.midLowHz);
+  Serial.printf("Mid-high: %.1f Hz\n", crossover_.midHighHz);
+  Serial.printf("High cutoff: %.1f Hz\n", crossover_.highCutHz);
+#else
+  std::cout << "\nDSP summary:" << std::endl;
+  std::cout << "Master gain: " << gain_.master << " dB" << std::endl;
+  std::cout << "Low gain: " << gain_.low << " dB" << std::endl;
+  std::cout << "Mid gain: " << gain_.mid << " dB" << std::endl;
+  std::cout << "High gain: " << gain_.high << " dB" << std::endl;
+  std::cout << "Low cutoff: " << crossover_.lowCutHz << " Hz" << std::endl;
+  std::cout << "Mid-low: " << crossover_.midLowHz << " Hz" << std::endl;
+  std::cout << "Mid-high: " << crossover_.midHighHz << " Hz" << std::endl;
+  std::cout << "High cutoff: " << crossover_.highCutHz << " Hz" << std::endl;
+#endif
 }
 
-void loop() {
-  if (Serial.available() > 0) {
-    char command = Serial.read();
-
-    switch (command) {
-      case '0':
-        printMenu();
-        break;
-      case '1':
-        showEq();
-        break;
-      case '2':
-        setEqBand();
-        break;
-      case '3':
-        showCrossover();
-        break;
-      case '4':
-        setCrossover();
-        break;
-      case '5':
-        showGain();
-        break;
-      case '6':
-        setGain();
-        break;
-      case '7':
-        processTestSignal();
-        break;
-      case '8':
-        dsp.setDefaultProfile();
-        Serial.println("Default profile restored.");
-        break;
-      case '\n':
-      case '\r':
-        break;
-      default:
-        Serial.println("Invalid command.");
-        printMenu();
-        break;
-    }
-
-    while (Serial.available() > 0) {
-      Serial.read();
-    }
-  }
-
-  delay(20);
-}
-
+}  // namespace laudspeaker
