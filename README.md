@@ -2,12 +2,15 @@
 #include <cmath>
 
 #include "audio/AudioDSP.h"
+#include "ui/LcdMenu.h"
 
 namespace {
 
 using laudspeaker::AudioDSPManager;
+using laudspeaker::LcdMenu;
 
 AudioDSPManager dsp;
+LcdMenu lcdMenu;
 
 void printMenu() {
   Serial.println();
@@ -21,8 +24,8 @@ void printMenu() {
   Serial.println("5. Show gain");
   Serial.println("6. Set gain");
   Serial.println("7. Process test signal");
-  Serial.println("8. Reset to default profile");
-  Serial.println("9. Print DSP summary");
+  Serial.println("8. Reset default profile");
+  Serial.println("9. Show DSP summary");
   Serial.println("0. Show menu");
   Serial.println("========================================");
 }
@@ -41,15 +44,20 @@ int readIntValue() {
   return Serial.parseInt();
 }
 
+void updateDisplay() {
+  lcdMenu.setEqValues(dsp.eqBands());
+  lcdMenu.setGainValues(dsp.gains());
+  lcdMenu.setCrossoverValues(dsp.crossover());
+  lcdMenu.refresh();
+}
+
 void showEq() {
   Serial.println("\nCurrent EQ settings (dB):");
   const auto& freqs = dsp.eqCenterFrequenciesHz();
   for (size_t i = 0; i < dsp.eqBands().size(); ++i) {
-    Serial.printf("Band %d [%5.0f Hz] : %.2f dB\n",
-                  static_cast<int>(i + 1),
-                  freqs[i],
-                  dsp.eqBands()[i]);
+    Serial.printf("Band %d [%5.0f Hz] : %.2f dB\n", static_cast<int>(i + 1), freqs[i], dsp.eqBands()[i]);
   }
+  updateDisplay();
 }
 
 void showCrossover() {
@@ -58,6 +66,7 @@ void showCrossover() {
   Serial.printf("Mid low: %.1f Hz\n", dsp.crossover().midLowHz);
   Serial.printf("Mid high: %.1f Hz\n", dsp.crossover().midHighHz);
   Serial.printf("High cutoff: %.1f Hz\n", dsp.crossover().highCutHz);
+  updateDisplay();
 }
 
 void showGain() {
@@ -67,6 +76,7 @@ void showGain() {
   Serial.printf("Low gain: %.2f dB\n", g.low);
   Serial.printf("Mid gain: %.2f dB\n", g.mid);
   Serial.printf("High gain: %.2f dB\n", g.high);
+  updateDisplay();
 }
 
 void setEqBand() {
@@ -81,6 +91,7 @@ void setEqBand() {
   const float db = readFloatValue();
   dsp.setEqBand(band - 1, db);
   Serial.printf("Band %d set to %.2f dB\n", band, db);
+  updateDisplay();
 }
 
 void setCrossover() {
@@ -98,6 +109,7 @@ void setCrossover() {
 
   dsp.setCrossover(low, midLow, midHigh, high);
   Serial.println("Crossover updated.");
+  updateDisplay();
 }
 
 void setGain() {
@@ -115,12 +127,13 @@ void setGain() {
 
   dsp.setGain(master, low, mid, high);
   Serial.println("Gain values updated.");
+  updateDisplay();
 }
 
 void processTestSignal() {
   Serial.println("Processing test signal...");
 
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 8; ++i) {
     const float sample = 0.4f * std::sin((2.0f * static_cast<float>(M_PI) * 220.0f * i) / 48000.0f);
     const float processed = dsp.processSample(sample);
     const float low = dsp.processChannel(processed, 0);
@@ -141,6 +154,8 @@ void setup() {
   }
 
   dsp.setDefaultProfile();
+  lcdMenu.init();
+  updateDisplay();
   printMenu();
 }
 
@@ -176,9 +191,19 @@ void loop() {
       case '8':
         dsp.setDefaultProfile();
         Serial.println("Default profile restored.");
+        updateDisplay();
         break;
       case '9':
         dsp.printSummary();
+        break;
+      case 'u':
+        lcdMenu.next();
+        break;
+      case 'd':
+        lcdMenu.previous();
+        break;
+      case 'e':
+        lcdMenu.select();
         break;
       case '\n':
       case '\r':
